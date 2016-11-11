@@ -77,42 +77,36 @@ int main(int argc,char *argv[]){
 	}
 	struct frame *f;
 	while(1){
-		printf("receiver: waiting to recvfrom on port: %s\n",PORT);
+
+		printf("receiver: waiting to recvfrom nbe: %d where nbeIdx: %d and lbr: %d\n",nbe,nbeIdx,lbr);
 		f = (struct frame *)malloc(sizeof(struct frame));
 		if((numbytes = recvfrom(sockfd,f,sizeof(struct frame),0,(struct sockaddr *)&client_addr,&addr_len)) == -1){
 			perror("recvfrom");
 			exit(1);
 		}
 
-		printf("receiver: got packet from %s\n",
-			inet_ntop(client_addr.ss_family,
-				get_in_addr((struct sockaddr *)& client_addr),ip,sizeof ip));
-
-		printf("receiver: packet is %d bytes long\n",numbytes);
+		// printf("receiver: got packet from %s\n",inet_ntop(client_addr.ss_family,get_in_addr((struct sockaddr *)& client_addr),ip,sizeof ip));
+		// printf("receiver: packet is %d bytes long\n",numbytes);
 		printf("receiver: packet seq_num: %d and len:%d\n",f->seq_num,f->msg_len);
 		// int i=0;
 		// for(i=0;i<1000;i++){
 		// 	print
 		// }
-		printf("msg: %s\n",f->msg);
+		// printf("msg: %s\n",f->msg);
 
 		diff = (f->seq_num - nbe)/1000;
 		printf("filled: %d\n",(nbeIdx+diff)%window_size );
 		window[(nbeIdx+diff)%window_size] = f;
 		int j = nbeIdx;
 		if(f->seq_num == nbe){
-			printf("received\n");
 			while(window[j]!=NULL){
 				printf("received j: %d\n",j);
-				lbr = window[j]->seq_num;
-				lbr = (lbr+1)%window_size;
-
+				lbr = window[j]->seq_num + window[j]->msg_len-1;
+				lbrIdx = (lbrIdx+1)%window_size;
 				free(window[j]);
 				window[j]=NULL;
-				printf("fjksdndjkcn: \n");
 				j = (j+1)%window_size;
 			}
-			printf("herer\n");
 			nbe = lbr+1;
 			nbeIdx = (lbrIdx+1)%window_size;
 			f = (struct frame *) malloc(sizeof(struct frame));

@@ -8,21 +8,21 @@
 #include <netdb.h>
 
 #define CPORT "8888"
-#define MAXMSGSIZE 1000
+#define MAXSEGSIZE 1000
+#define TOTMSGLENGTH 100000
 #define W 7
 
 struct frame{
 	int seq_num;			//byte number of the first byte sent
 	int advt_seq_num;		//advtertised seq number - all bytes upto this are valid
 	int msg_len;			//length of valid message being sent
-	char msg[1000];			//message
+	char msg[MAXSEGSIZE];			//message
 	int ack_valid;			
 };
 
 // char PORT[16];
 int PORT;
 char IP[INET6_ADDRSTRLEN];
-
 
 int main(int argc,char *argv[]){
 	//intialise
@@ -38,9 +38,9 @@ int main(int argc,char *argv[]){
 	struct addrinfo hints,*clientinfo,*pc;
 	struct sockaddr_in servAddr;
 	int numbytes;
-	char msg[100001];
+	char msg[TOTMSGLENGTH];
 	int i=0;
-	for(i=0;i<100000;i++){msg[i]= (i%26 + 97);}
+	for(i=0;i<TOTMSGLENGTH;i++){msg[i]= (i%26 + 97);}
 
 	memset(&hints,0,sizeof hints);
 	hints.ai_family = AF_UNSPEC;
@@ -79,20 +79,20 @@ int main(int argc,char *argv[]){
     int lba=-1,lbaIdx=-1;		//last byte acknowledged
     int lbs=-1,lbsIdx=-1;		//last byte sent
     //last byte written is the end infinite
-    int outstanding = 0,msg_len=1000;
+    int outstanding = 0,msg_len=MAXSEGSIZE;
     struct frame *window[W];
     fd_set readfds;
     int window_size = W;
     struct timeval tv;
     tv.tv_sec = 2;
     tv.tv_usec = 500000;
-    while(lba < 10000){
-    	while(outstanding < window_size){
+    while(lba < TOTMSGLENGTH){
+    	while(outstanding < window_size && lbs < TOTMSGLENGTH-1){
     		struct frame *f = (struct frame *)malloc(sizeof(struct frame));
     		f->seq_num = lbs+1;
-    		msg_len = 1000;
-    		if( lbs+1 + 1000 >= 10000){
-    			msg_len = 9999-lbs;
+    		msg_len = MAXSEGSIZE;
+    		if( lbs+1 + MAXSEGSIZE >= TOTMSGLENGTH){
+    			msg_len = TOTMSGLENGTH-1 -lbs;
     		}
     		memcpy(f->msg,&msg[lbs+1],msg_len);
     		f->msg_len=msg_len;
@@ -102,7 +102,8 @@ int main(int argc,char *argv[]){
 				perror("sendto failed");
 				return -1;
 			}
-			printf("Sent packet with seqNum: %d and len: %d and msg:%s\n",lbs+1,f->msg_len,f->msg);
+			// printf("Sent packet with seqNum: %d and len: %d and msg:%s\n",lbs+1,f->msg_len,f->msg);
+			printf("Sent packet with seqNum: %d and len: %d \n",lbs+1,f->msg_len);
 			lbs += msg_len;
     		outstanding++;
 			lbsIdx = (lbsIdx+1)%window_size;
