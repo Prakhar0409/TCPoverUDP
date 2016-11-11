@@ -14,22 +14,13 @@
 #define MSS 1000
 
 struct frame{
-	int seq_num;
-	char msg[1000];
+	int seq_num;			//byte number of the first byte sent
+	int advt_seq_num;		//advtertised seq number - all bytes upto this are valid
+	int msg_len;			//length of valid message being sent
+	char msg[1000];			//message
+	int ack_valid;			
 };
 
-struct ack{
-	int seq_num;
-	// char msg[1000];
-};
-
-int RWS=W;		//receive window size
-int LAF=(W-1);	//largest acceptable frame
-int lafIdx = W-1;
-int LFR=0;		//last frame received
-int lfrIdx = 0;
-int win_recv[W] = {0};
-int win_seq[W] = {0};
 
 void * get_in_addr(struct sockaddr *sa){
 	if (sa->sa_family == AF_INET) {
@@ -75,55 +66,65 @@ int main(int argc,char *argv[]){
 	}
 	freeaddrinfo(servinfo);
 
-	struct frame f;
-	int diff=0;
-	struct ack ackn;
+	int lbr=-1,lbrIdx=-1;		//last byte received;
+	int nbe=0,nbeIdx=0;			//next byte expected;
+	struct frame *window[W];
+	//last byte read is equal to the last byte recv
+	int window_size = W,diff=0;
+	int i = 0;
+	for(i=0;i<W;i++){
+		window[i]=NULL;
+	}
+	struct frame *f;
 	while(1){
 		printf("receiver: waiting to recvfrom on port: %s\n",PORT);
-		
-		if((numbytes = recvfrom(sockfd,&f,sizeof(struct frame),0,(struct sockaddr *)&client_addr,&addr_len)) == -1){
+		f = (struct frame *)malloc(sizeof(struct frame));
+		if((numbytes = recvfrom(sockfd,f,sizeof(struct frame),0,(struct sockaddr *)&client_addr,&addr_len)) == -1){
 			perror("recvfrom");
 			exit(1);
 		}
 
-
-		printf("receiver: got packet from %s\n", 
+		printf("receiver: got packet from %s\n",
 			inet_ntop(client_addr.ss_family,
 				get_in_addr((struct sockaddr *)& client_addr),ip,sizeof ip));
+
 		printf("receiver: packet is %d bytes long\n",numbytes);
-		buf[numbytes] = '\0';
-		printf("receiver: packet contains: %d \n",f.seq_num);
+		printf("receiver: packet seq_num: %d and len:%d\n",f->seq_num,f->msg_len);
+		// int i=0;
+		// for(i=0;i<1000;i++){
+		// 	print
+		// }
+		printf("msg: %s\n",f->msg);
 
-		if(f.seq_num <= LAF){
-			diff = (f.seq_num - win_seq[lfrIdx]);
-			win_recv[(lfrIdx+diff)%W] = 1;
+		diff = (f->seq_num - nbe)/1000;
+		printf("filled: %d\n",(nbeIdx+diff)%window_size );
+		window[(nbeIdx+diff)%window_size] = f;
+		int j = nbeIdx;
+		if(f->seq_num == nbe){
+			printf("received\n");
+			while(window[j]!=NULL){
+				printf("received j: %d\n",j);
+				lbr = window[j]->seq_num;
+				lbr = (lbr+1)%window_size;
 
-			int j=(lfrIdx+1)%W;
-			int flag = 0;
-			while(win_recv[j] == 1){
-				win_recv[j]=0;
-				lfrIdx = (lfrIdx+1)%W;
-				LFR++;
-				j = (j+1)%W;
-				flag = 1;
+				free(window[j]);
+				window[j]=NULL;
+				printf("fjksdndjkcn: \n");
+				j = (j+1)%window_size;
 			}
-			if(flag){
-				//send acknowledgement
-				ackn.seq_num = LFR;
-				LAF = LFR+RWS-1;
-				lafIdx = (lfrIdx-1)%W;
-				if((numbytes = sendto(sockfd,&ackn,sizeof(struct ack),0,(struct sockaddr *) &client_addr,addr_len) < 0)){
-					perror("sendto failed");
-					return -1;
-				}
+			printf("herer\n");
+			nbe = lbr+1;
+			nbeIdx = (lbrIdx+1)%window_size;
+			f = (struct frame *) malloc(sizeof(struct frame));
+			f->msg_len = 0;
+			f->advt_seq_num = nbe;
+			f->ack_valid = 1;
+			if((numbytes = sendto(sockfd,f,sizeof(struct frame),0,(struct sockaddr *) &client_addr,addr_len) < 0)){
+				perror("sendto failed");
+				return -1;
 			}
+			free(f);
 		}
-		
 	}
-
 	close(sockfd);
-
-
-
-
 }
