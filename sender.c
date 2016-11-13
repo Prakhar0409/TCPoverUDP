@@ -6,11 +6,13 @@
 #include <sys/socket.h>
 #include <string.h>
 #include <netdb.h>
+#include <time.h>
 
 #define CPORT "8888"
 #define MAXSEGSIZE 1000
 #define TOTMSGLENGTH 100000
-#define W 7
+#define MW 100
+
 
 struct frame{
 	int seq_num;			//byte number of the first byte sent
@@ -20,19 +22,34 @@ struct frame{
 	int ack_valid;			
 };
 
-// char PORT[16];
+struct data{
+	int seq_num;
+	int msg_len;
+	time_t ts;
+};
+
+struct queue{
+	struct data line[105];
+	int first;
+	int curr;		// block after last
+	int size;
+	int len;
+};
+
+int W = 5900;
 int PORT;
 char IP[INET6_ADDRSTRLEN];
+float loss;
 
 int main(int argc,char *argv[]){
 	//intialise
-	if(argc!=3){
-		printf("Usage: ./sender IP Port\n");
+	if(argc!=4){
+		printf("Usage: ./sender IP Port loss\n");
 		return -1;
 	}
 	PORT = atoi(argv[2]);
 	printf("Connecting to %s:%d\n",argv[1],PORT);
-
+	loss = atof(argv[3]);
 	//vars
 	int sockfd;
 	struct addrinfo hints,*clientinfo,*pc;
@@ -80,14 +97,70 @@ int main(int argc,char *argv[]){
     int lbs=-1,lbsIdx=-1;		//last byte sent
     //last byte written is the end infinite
     int outstanding = 0,msg_len=MAXSEGSIZE;
-    struct frame *window[W];
+    struct frame *window[MW];
     fd_set readfds;
-    int window_size = W;
+    int window_size = 1;
     struct timeval tv;
-    tv.tv_sec = 2;
-    tv.tv_usec = 500000;
-    while(lba < TOTMSGLENGTH){
-    	while(outstanding < window_size && lbs < TOTMSGLENGTH-1){
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    int flag_packet_lost = 1;
+    struct queue q;
+    q.size = 101;
+    q.first = 0;
+    q.curr = 0;
+    q.len = 0;
+	time_t tstart,tnow; time(&tstart);
+	
+    while(lba < TOTMSGLENGTH-1){
+    	
+    	
+    	time(&tnow);
+    	int seconds = difftime(tnow,q.line[q.first].ts);
+    	// printf("diff: %d || q_len: %d\n",seconds,q.len);
+    	if(q.len>0 && seconds >= 1){
+    		//timer expired - resend the packet just beyond the last ack
+    		printf("REsending Packet: %d\n", q.line[q.first].seq_num);
+    		struct frame *f = (struct frame *)malloc(sizeof(struct frame));
+    		f->seq_num = lba+1;
+    		msg_len = MAXSEGSIZE;
+    		if( lba+1 + MAXSEGSIZE >= TOTMSGLENGTH){
+    			msg_len = TOTMSGLENGTH-1 -lba;
+    		}
+    		memcpy(f->msg,&msg[lba+1],msg_len);
+    		f->msg_len=msg_len;
+    		f->msg[msg_len]='\0';
+    		float r = (double)rand() / (double)RAND_MAX;
+    		if(r>=loss){
+    			printf("Really REsending packet: %d\n",f->seq_num);
+	    		if((numbytes = sendto(sockfd,f,sizeof(struct frame),0,(struct sockaddr *) &servAddr,sizeof(servAddr)) < 0)){
+					perror("sendto failed");
+					return -1;
+				}
+			}
+			q.line[q.first].seq_num = f->seq_num;
+			q.line[q.first].msg_len = f->msg_len;
+			time(&(q.line[q.first].ts));
+			// printf("time: %s\n",asctime(q.line[q.first].ts));
+			// printf("seconds ->now: %.f\n", difftime(q.line[q.first].ts, (time_t) 0));
+
+			//window size 1;
+			int j= (lbaIdx+1)%window_size;
+			for (; j != lbsIdx; j = (j+1)%window_size){
+				if(window[j] != NULL){free(window[j]);}
+			}
+			if(window[j] != NULL){free(window[j]);}
+			
+			W = MAXSEGSIZE;
+			window_size = W/MAXSEGSIZE;
+			window[0] = f;
+			outstanding = 1;
+			lbaIdx = -1;
+			lbsIdx = 0;
+			// lbsIdx = lbaIdx+1
+    	}
+    	
+
+    	while(outstanding < window_size && lba < TOTMSGLENGTH-1){
     		struct frame *f = (struct frame *)malloc(sizeof(struct frame));
     		f->seq_num = lbs+1;
     		msg_len = MAXSEGSIZE;
@@ -98,12 +171,30 @@ int main(int argc,char *argv[]){
     		f->msg_len=msg_len;
     		f->msg[msg_len]='\0';
 
-    		if((numbytes = sendto(sockfd,f,sizeof(struct frame),0,(struct sockaddr *) &servAddr,sizeof(servAddr)) < 0)){
-				perror("sendto failed");
-				return -1;
+    		float r = (double)rand() / (double)RAND_MAX;
+    		if(r>=loss){
+    			printf("Really sending packet: %d\n",f->seq_num);
+	    		if((numbytes = sendto(sockfd,f,sizeof(struct frame),0,(struct sockaddr *) &servAddr,sizeof(servAddr)) < 0)){
+					perror("sendto failed");
+					return -1;
+				}
+			}
+			if(q.len<q.size){
+				struct data d = q.line[q.curr];
+				d.seq_num = f->seq_num;
+				d.msg_len = f->msg_len;
+				time(&d.ts);
+				q.line[q.curr] = d;
+
+				q.curr++; q.len++;
+			}else{
+				printf("Sender queue full\n");
 			}
 			// printf("Sent packet with seqNum: %d and len: %d and msg:%s\n",lbs+1,f->msg_len,f->msg);
-			printf("Sent packet with seqNum: %d and len: %d \n",lbs+1,f->msg_len);
+			// printf("Sent packet with seqNum: %d and len: %d \n",lbs+1,f->msg_len);
+			time(&tnow);
+			seconds = difftime(tnow,tstart);
+			printf("Sent: W= %d,  t_sec= %d,  seq_num= %d\n", W,seconds,f->seq_num);
 			lbs += msg_len;
     		outstanding++;
 			lbsIdx = (lbsIdx+1)%window_size;
@@ -114,27 +205,45 @@ int main(int argc,char *argv[]){
     	FD_ZERO(&readfds);
     	FD_SET(sockfd,&readfds);
 
-    	//dont care abt write and exceptfds
+    	// printf("Before timer\n");
     	select(sockfd+1,&readfds,NULL,NULL,&tv);
+    	// printf("After timer\n");
     	if(FD_ISSET(sockfd,&readfds)){
     		struct frame *f = (struct frame *) malloc(sizeof(struct frame));
     		if((numbytes = recvfrom(sockfd,f,sizeof(struct frame),0,0,0)) == -1){
 				perror("recvfrom");
 				exit(1);
 			}
-			printf("ACK received. NextSeqNoExpected: %d\n",f->advt_seq_num);
+			
+			time(&tnow);
+			seconds = difftime(tnow,tstart);
 			
 			int j= (lbaIdx+1)%window_size;
+			if(window[j]!=NULL && window[j]->seq_num < f->advt_seq_num){
+				int tmp = (MAXSEGSIZE*MAXSEGSIZE)/W;
+				W += tmp;
+				window_size = (W/MAXSEGSIZE);
+			}
 
-			while(window[j]==NULL || window[j]->seq_num < f->advt_seq_num){
+			printf("ACK Received: W= %d,  t_sec= %d,  advt_seq_num= %d\n", W,seconds,f->advt_seq_num);
+			
+			//removing from the senders window
+			while(window[j]!=NULL && window[j]->seq_num < f->advt_seq_num){
 				free(window[j]);
-
 				lbaIdx = (lbaIdx+1)%window_size;
 				j = (lbaIdx+1)%window_size;
 				outstanding--;
 				lba = f->advt_seq_num-1;
 			}
 
+			free(f);
+			
+			//remove all timers uptill the lba
+			int q_tmp = q.first;
+    		while(lba >= q.line[q_tmp].seq_num && q.first != q.curr){
+	    		q.len--;
+	    		q.first = (q.first+1)%q.size; q_tmp = (q_tmp+1)%q.size;
+	    	}
 		}
 		
 	}
