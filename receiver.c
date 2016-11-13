@@ -110,15 +110,15 @@ int main(int argc,char *argv[]){
 			nbe = lbr+1;
 			nbeIdx = (lbrIdx+1)%window_size;
 			f = (struct frame *) malloc(sizeof(struct frame));
-			f->msg_len = 0;
-			f->advt_seq_num = nbe;
-			f->ack_valid = 1;
-			if((numbytes = sendto(sockfd,f,sizeof(struct frame),0,(struct sockaddr *) &client_addr,addr_len) < 0)){
-				perror("sendto failed");
-				return -1;
-			}
-			free(f);
 		}
+		f->msg_len = 0;
+		f->advt_seq_num = nbe;
+		f->ack_valid = 1;
+		if((numbytes = sendto(sockfd,f,sizeof(struct frame),0,(struct sockaddr *) &client_addr,addr_len) < 0)){
+			perror("sendto failed");
+			return -1;
+		}
+		free(f);
 	}
 	close(sockfd);
 }
