@@ -10,7 +10,7 @@
 #include <string.h>
 #define PORT "8887"
 #define MAXBUFLEN 1000
-#define W 7
+#define W 100
 #define MSS 1000
 
 struct frame{
@@ -95,12 +95,12 @@ int main(int argc,char *argv[]){
 		// printf("msg: %s\n",f->msg);
 
 		diff = (f->seq_num - nbe)/1000;
-		printf("filled: %d\n",(nbeIdx+diff)%window_size );
+		// printf("filled: %d\n",(nbeIdx+diff)%window_size );
 		window[(nbeIdx+diff)%window_size] = f;
 		int j = nbeIdx;
 		if(f->seq_num == nbe){
 			while(window[j]!=NULL){
-				printf("received j: %d\n",j);
+				// printf("received j: %d\n",j);
 				lbr = window[j]->seq_num + window[j]->msg_len-1;
 				lbrIdx = (lbrIdx+1)%window_size;
 				free(window[j]);

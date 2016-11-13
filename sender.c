@@ -148,7 +148,7 @@ int main(int argc,char *argv[]){
 			//window size 1;
 			int j= (lbaIdx+1)%window_size;
 			for (; j != lbsIdx; j = (j+1)%window_size){
-				if(window[j] != NULL){free(window[j]);}
+				if(window[j] != NULL){free(window[j]); window[j]=NULL;}
 			}
 			if(window[j] != NULL){free(window[j]); window[j]=NULL;}
 			
@@ -211,12 +211,12 @@ int main(int argc,char *argv[]){
     	select(sockfd+1,&readfds,NULL,NULL,&tv);
     	// printf("After timer\n");
     	if(FD_ISSET(sockfd,&readfds)){
-    		printf("Received an ack\n");
     		struct frame *f = (struct frame *) malloc(sizeof(struct frame));
     		if((numbytes = recvfrom(sockfd,f,sizeof(struct frame),0,0,0)) == -1){
 				perror("recvfrom");
 				exit(1);
 			}
+			printf("Received an ack advt: %d, lba: %d, lbaIdx: %d\n",f->advt_seq_num,lba,lbaIdx);
 			
 			time(&tnow);
 			seconds = difftime(tnow,tstart);
@@ -226,11 +226,11 @@ int main(int argc,char *argv[]){
 			//removing from the senders window
 			while(window[j]!=NULL && window[j]->seq_num < f->advt_seq_num){
 				if(window[j] != NULL){
-					printf("not null\n");
-					printf("%d\n",window[j]->seq_num );
+					// printf("not null\n");
+					// printf("%d\n",window[j]->seq_num );
 					free(window[j]);
 					window[j]=NULL;
-					printf("after free\n");
+					// printf("after free\n");
 				}
 				lbaIdx = (lbaIdx+1)%window_size;
 				j = (lbaIdx+1)%window_size;
