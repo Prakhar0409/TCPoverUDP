@@ -95,12 +95,12 @@ int main(int argc,char *argv[]){
 		// printf("msg: %s\n",f->msg);
 
 		diff = (f->seq_num - nbe)/1000;
-		// printf("filled: %d\n",(nbeIdx+diff)%window_size );
+		printf("filled: %d\n",(nbeIdx+diff)%window_size );
 		window[(nbeIdx+diff)%window_size] = f;
 		int j = nbeIdx;
 		if(f->seq_num == nbe){
 			while(window[j]!=NULL){
-				// printf("received j: %d\n",j);
+				printf("received j: %d\n",j);
 				lbr = window[j]->seq_num + window[j]->msg_len-1;
 				lbrIdx = (lbrIdx+1)%window_size;
 				free(window[j]);
@@ -109,16 +109,17 @@ int main(int argc,char *argv[]){
 			}
 			nbe = lbr+1;
 			nbeIdx = (lbrIdx+1)%window_size;
-			f = (struct frame *) malloc(sizeof(struct frame));
+			
 		}
-		f->msg_len = 0;
-		f->advt_seq_num = nbe;
-		f->ack_valid = 1;
-		if((numbytes = sendto(sockfd,f,sizeof(struct frame),0,(struct sockaddr *) &client_addr,addr_len) < 0)){
+		struct frame *f1 = (struct frame *) malloc(sizeof(struct frame));
+		f1->msg_len = 0;
+		f1->advt_seq_num = nbe;
+		f1->ack_valid = 1;
+		if((numbytes = sendto(sockfd,f1,sizeof(struct frame),0,(struct sockaddr *) &client_addr,addr_len) < 0)){
 			perror("sendto failed");
 			return -1;
 		}
-		free(f);
+		free(f1);
 	}
 	close(sockfd);
 }
