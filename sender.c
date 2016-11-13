@@ -98,6 +98,8 @@ int main(int argc,char *argv[]){
     //last byte written is the end infinite
     int outstanding = 0,msg_len=MAXSEGSIZE;
     struct frame *window[MW];
+
+    for(i=0;i<MW;i++){window[i]=NULL;}
     fd_set readfds;
     int window_size = 1;
     struct timeval tv;
@@ -148,7 +150,7 @@ int main(int argc,char *argv[]){
 			for (; j != lbsIdx; j = (j+1)%window_size){
 				if(window[j] != NULL){free(window[j]);}
 			}
-			if(window[j] != NULL){free(window[j]);}
+			if(window[j] != NULL){free(window[j]); window[j]=NULL;}
 			
 			W = MAXSEGSIZE;
 			window_size = W/MAXSEGSIZE;
@@ -209,6 +211,7 @@ int main(int argc,char *argv[]){
     	select(sockfd+1,&readfds,NULL,NULL,&tv);
     	// printf("After timer\n");
     	if(FD_ISSET(sockfd,&readfds)){
+    		printf("Received an ack\n");
     		struct frame *f = (struct frame *) malloc(sizeof(struct frame));
     		if((numbytes = recvfrom(sockfd,f,sizeof(struct frame),0,0,0)) == -1){
 				perror("recvfrom");
@@ -219,24 +222,34 @@ int main(int argc,char *argv[]){
 			seconds = difftime(tnow,tstart);
 			
 			int j= (lbaIdx+1)%window_size;
-			if(window[j]!=NULL && window[j]->seq_num < f->advt_seq_num){
-				int tmp = (MAXSEGSIZE*MAXSEGSIZE)/W;
-				W += tmp;
-				window_size = (W/MAXSEGSIZE);
-			}
-
-			printf("ACK Received: W= %d,  t_sec= %d,  advt_seq_num= %d\n", W,seconds,f->advt_seq_num);
-			
+			int flag_increase_window = 0;	
 			//removing from the senders window
 			while(window[j]!=NULL && window[j]->seq_num < f->advt_seq_num){
-				free(window[j]);
+				if(window[j] != NULL){
+					printf("not null\n");
+					printf("%d\n",window[j]->seq_num );
+					free(window[j]);
+					window[j]=NULL;
+					printf("after free\n");
+				}
 				lbaIdx = (lbaIdx+1)%window_size;
 				j = (lbaIdx+1)%window_size;
 				outstanding--;
 				lba = f->advt_seq_num-1;
+				flag_increase_window = 1;
 			}
 
+			if(flag_increase_window){
+				int tmp = (MAXSEGSIZE*MAXSEGSIZE)/W;
+				W += tmp;
+				window_size = (W/MAXSEGSIZE);
+				flag_increase_window = 0;
+			}
+
+			printf("ACK Received: W= %d,  t_sec= %d,  advt_seq_num= %d\n", W,seconds,f->advt_seq_num);
+
 			free(f);
+			f=NULL;
 			
 			//remove all timers uptill the lba
 			int q_tmp = q.first;
