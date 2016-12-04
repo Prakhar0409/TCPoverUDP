@@ -7,6 +7,7 @@
 #include <string.h>
 #include <netdb.h>
 #include <time.h>
+#include <arpa/inet.h>
 
 #define CPORT "8888"
 #define MAXSEGSIZE 1000
